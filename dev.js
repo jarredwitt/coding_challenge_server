@@ -16,6 +16,9 @@ if (process.platform === 'win32') {
 // Remove the build folder
 rm('-rf', '.build');
 
+// create our data folder for the sqlite database
+fs.mkdirSync('./data');
+
 exec(babelCmd, { async: true });
 
 // Make sure we give babel enough time and then start the server
