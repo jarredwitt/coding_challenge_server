@@ -1,7 +1,7 @@
 # coding_challenge_server
 
 1. Git Clone
-2. ```npm install```
+2. ```npm install``` or ```yarn install```
 3. ```npm start```
 
 Can view all household applications in the database by going to
