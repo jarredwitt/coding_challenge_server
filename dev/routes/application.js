@@ -1,5 +1,4 @@
 import express from 'express';
-import Sequelize from 'sequelize';
 
 import Application from '../models/Application';
 import Member from '../models/Member';
@@ -7,7 +6,7 @@ import Vehicle from '../models/Vehicle';
 
 const router = express.Router();
 
-router.get('/', async (req, res) => {
+router.get('/', async (req, res, next) => {
   try {
     const allApplicationsResult = await Application.findAll({
       include: [{
@@ -23,11 +22,11 @@ router.get('/', async (req, res) => {
 
     res.send(result);
   } catch (error) {
-    console.log(error);
+    next({ status: 500, message: error.message });
   }
 });
 
-router.get('/:id', async (req, res) => {
+router.get('/:id', async (req, res, next) => {
   try {
     const { id } = req.params;
     const fullApplicationResult = await Application.findById(id, {
@@ -42,11 +41,11 @@ router.get('/:id', async (req, res) => {
 
     res.send(fullApplicationResult.toJSON());
   } catch (error) {
-    console.log(error);
+    next({ status: 500, message: error.message });
   }
 });
 
-router.post('/', async (req, res) => {
+router.post('/', async (req, res, next) => {
   try {
     const { application, members, vehicles } = req.body;
 
@@ -83,29 +82,28 @@ router.post('/', async (req, res) => {
       vehicles: vehiclesResults.map(vehicle => vehicle.toJSON()),
     });
   } catch (error) {
-    console.log(error);
+    next({ status: 500, message: error.message });
   }
 });
 
-router.post('/:id', async (req, res) => {
+router.post('/:id', async (req, res, next) => {
   try {
     const { application, members, vehicles } = req.body;
 
+    // update the application first
     const { id: applicationId, ...applicationProps } = application;
     await Application.update(applicationProps, { where: { id: applicationId }});
 
     // find current members and update
     const currentMemberIdMappings = {};
-    const currentMembers = members.filter(member => !member.local && !member.removed);
-    const currentMemberPromises = currentMembers.map(member => {
+    const currentMemberPromises = members.filter(member => !member.local && !member.removed).map(member => {
       const { id, ...memberProps } = member;
       currentMemberIdMappings[id] = id;
       return Member.update(memberProps, { where: { id }});
     });
-
     await Promise.all(currentMemberPromises);
 
-    // find new members and create while maintaining the temp ids
+    // create new members while maintaining the temp ids
     const newMemberIdMappings = {};
     const newMemberPromises = members.filter(member => member.local).map((member, index) => {
       const { id, local, ...otherProps } = member;
@@ -116,12 +114,15 @@ router.post('/:id', async (req, res) => {
       })
     });
 
-    // store the newly created records so we can map a vehicle if any
+    // store the newly created records
     const newMemberResults = await Promise.all(newMemberPromises);
+
+    // replace the temp ids for new members with the new record ids
     newMemberResults.forEach((member, index) => {
       currentMemberIdMappings[newMemberIdMappings[index]] = member.id;
     });
 
+    // reconcile the vehicle owner ids with the member ids
     const reconciledVehicles = vehicles.map(vehicle => {
       const { ownerId, ...otherProps } = vehicle;
       return {
@@ -130,14 +131,14 @@ router.post('/:id', async (req, res) => {
       }
     });
 
-    const currentVehicles = reconciledVehicles.filter(vehicle => !vehicle.local && !vehicle.removed);
-    const currentVehiclePromises = currentVehicles.map(vehicle => {
+    // update any current vehicles
+    const currentVehiclePromises = reconciledVehicles.filter(vehicle => !vehicle.local && !vehicle.removed).map(vehicle => {
       const { id, ...vehicleProps } = vehicle;
       return Vehicle.update(vehicleProps, { where: { id }});
     });
-
     await Promise.all(currentVehiclePromises);
 
+    // create new vehicles
     const newVehiclePromises = reconciledVehicles.filter(vehicle => vehicle.local).map(vehicle => {
       const { id, ...otherProps } = vehicle;
 
@@ -146,14 +147,15 @@ router.post('/:id', async (req, res) => {
         application_id: applicationId,
       })
     });
-
     await Promise.all(newVehiclePromises);
 
+    // remove the members and vehicles that have been removed from the application
     const removeVehiclePromises = reconciledVehicles.filter(vehicle => vehicle.removed).map(vehicle => Vehicle.destroy({ where: { id: vehicle.id }}));
     const removeMemberPromises = members.filter(member => member.removed).map(member => Member.destroy({ where: { id: member.id }}));
 
     await Promise.all([...removeVehiclePromises, ...removeMemberPromises]);
 
+    // Finally, fetch the application with the member and vehicle relations
     const fullApplicationResult = await Application.findById(applicationId, {
       include: [{
         model: Member,
@@ -164,6 +166,7 @@ router.post('/:id', async (req, res) => {
       }]
     });
 
+    // transform the response to the correct application, members, vehicles format for the mobile application
     const { members: finalMembers, vehicles: finalVehicles, ...applicationData } = fullApplicationResult.toJSON();
 
     res.send({
@@ -172,7 +175,7 @@ router.post('/:id', async (req, res) => {
       vehicles: finalVehicles,
     });
   } catch (error) {
-    console.log(error);
+    next({ status: 500, message: error.message });
   }
 });
 

@@ -17,7 +17,8 @@ if (process.platform === 'win32') {
 rm('-rf', '.build');
 
 // create our data folder for the sqlite database
-fs.mkdirSync('./data');
+const dataDirectoryExists = fs.existsSync('./data');
+!dataDirectoryExists && fs.mkdirSync('./data');
 
 exec(babelCmd, { async: true });
 

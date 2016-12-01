@@ -3,16 +3,17 @@ import bodyParser from 'body-parser';
 
 import db from './db';
 import applicationRoutes from './routes/application';
+import phoneNumberRoutes from './routes/phoneNumber';
 
 let app = express();
 
 app.use(bodyParser.json());
 
-app.use('/application', applicationRoutes);
+app.use('/applications', applicationRoutes);
+app.use('/phonenumbers', phoneNumberRoutes);
 
 app.use((err, req, res, next) => {
   res.status(err.status || 500).send({
-    code: err.code,
     message: err.message
   });
 });

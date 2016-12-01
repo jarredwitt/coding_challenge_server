@@ -8,10 +8,6 @@ import Vehicle from './Vehicle';
 const Application = db.define('application', {
   address: Sequelize.STRING,
   city: Sequelize.STRING,
-  confirmationCode: {
-    type: Sequelize.INTEGER,
-    field: 'confirmation_code'
-  },
   numberOfBedrooms: {
     type: Sequelize.INTEGER,
     field: 'number_of_bedrooms'
